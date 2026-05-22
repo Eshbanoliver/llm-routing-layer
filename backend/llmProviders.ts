@@ -5,8 +5,35 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+export interface ModelMetadata {
+  name: string;
+  inputCostPerToken: number;
+  outputCostPerToken: number;
+  provider: 'google' | 'openai' | 'anthropic';
+  tier: 'low' | 'medium' | 'high';
+  avgLatency: number;
+}
+
+export interface QueryResponse {
+  success: boolean;
+  routedModel: string;
+  provider: 'google' | 'openai' | 'anthropic';
+  response: string;
+  latency: number;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  isSimulated: boolean;
+}
+
+export interface ApiKeys {
+  GEMINI_API_KEY?: string | null;
+  OPENAI_API_KEY?: string | null;
+  ANTHROPIC_API_KEY?: string | null;
+}
+
 // Pricing per token (Input / Output)
-export const MODEL_PRICING = {
+export const MODEL_PRICING: Record<string, ModelMetadata> = {
   // Low Complexity Models
   'gemini-1.5-flash': {
     name: 'Gemini 1.5 Flash',
@@ -14,7 +41,7 @@ export const MODEL_PRICING = {
     outputCostPerToken: 0.30 / 1000000,
     provider: 'google',
     tier: 'low',
-    avgLatency: 550 // ms
+    avgLatency: 550
   },
   'gpt-4o-mini': {
     name: 'GPT-4o Mini',
@@ -22,7 +49,7 @@ export const MODEL_PRICING = {
     outputCostPerToken: 0.60 / 1000000,
     provider: 'openai',
     tier: 'low',
-    avgLatency: 450 // ms
+    avgLatency: 450
   },
   
   // Medium Complexity Models
@@ -32,7 +59,7 @@ export const MODEL_PRICING = {
     outputCostPerToken: 5.00 / 1000000,
     provider: 'google',
     tier: 'medium',
-    avgLatency: 1500 // ms
+    avgLatency: 1500
   },
   'claude-3-haiku': {
     name: 'Claude 3 Haiku',
@@ -40,7 +67,7 @@ export const MODEL_PRICING = {
     outputCostPerToken: 1.25 / 1000000,
     provider: 'anthropic',
     tier: 'medium',
-    avgLatency: 650 // ms
+    avgLatency: 650
   },
 
   // High Complexity / Premium Models
@@ -50,7 +77,7 @@ export const MODEL_PRICING = {
     outputCostPerToken: 10.00 / 1000000,
     provider: 'openai',
     tier: 'high',
-    avgLatency: 2200 // ms
+    avgLatency: 2200
   },
   'claude-3-5-sonnet': {
     name: 'Claude 3.5 Sonnet',
@@ -58,16 +85,16 @@ export const MODEL_PRICING = {
     outputCostPerToken: 15.00 / 1000000,
     provider: 'anthropic',
     tier: 'high',
-    avgLatency: 2800 // ms
+    avgLatency: 2800
   }
 };
 
 // Initialize real clients if keys are present
-let geminiClient = null;
-let openaiClient = null;
-let anthropicClient = null;
+let geminiClient: GoogleGenerativeAI | null = null;
+let openaiClient: OpenAI | null = null;
+let anthropicClient: Anthropic | null = null;
 
-export function initializeClients(keys = {}) {
+export function initializeClients(keys: ApiKeys = {}): void {
   const geminiKey = keys.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   const openaiKey = keys.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   const anthropicKey = keys.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
@@ -76,7 +103,7 @@ export function initializeClients(keys = {}) {
     try {
       geminiClient = new GoogleGenerativeAI(geminiKey);
       console.log('Gemini client initialized successfully.');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to init Gemini client:', e.message);
     }
   } else {
@@ -87,7 +114,7 @@ export function initializeClients(keys = {}) {
     try {
       openaiClient = new OpenAI({ apiKey: openaiKey });
       console.log('OpenAI client initialized successfully.');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to init OpenAI client:', e.message);
     }
   } else {
@@ -98,7 +125,7 @@ export function initializeClients(keys = {}) {
     try {
       anthropicClient = new Anthropic({ apiKey: anthropicKey });
       console.log('Anthropic client initialized successfully.');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to init Anthropic client:', e.message);
     }
   } else {
@@ -112,12 +139,12 @@ initializeClients();
 /**
  * Generate a smart response mock when API keys are not provided
  */
-function generateMockResponse(model, prompt) {
+function generateMockResponse(model: string, prompt: string): string {
   const query = prompt.toLowerCase();
   const modelMeta = MODEL_PRICING[model];
   const modelName = modelMeta.name;
   
-  let type = 'general';
+  let type: 'general' | 'coding' | 'math' | 'explain' = 'general';
   if (query.includes('code') || query.includes('function') || query.includes('class') || query.includes('program') || query.includes('compile') || query.includes('css') || query.includes('html')) {
     type = 'coding';
   } else if (query.includes('solve') || query.includes('math') || query.includes('calculate') || query.includes('equation') || query.includes('probability')) {
@@ -361,7 +388,7 @@ In practice, implementing this model improves scalability by 30-50% while decrea
 /**
  * Call the selected model (live or simulated)
  */
-export async function queryLLM(model, prompt, keys = {}) {
+export async function queryLLM(model: string, prompt: string, keys: ApiKeys = {}): Promise<QueryResponse> {
   const modelMeta = MODEL_PRICING[model];
   if (!modelMeta) {
     throw new Error(`Unknown model: ${model}`);
@@ -390,13 +417,11 @@ export async function queryLLM(model, prompt, keys = {}) {
       initializeClients(keys);
 
       if (modelMeta.provider === 'google' && geminiClient) {
-        // Translate model keys for Gemini API
         const apiModel = model === 'gemini-1.5-flash' ? 'gemini-1.5-flash' : 'gemini-1.5-pro';
         const modelInstance = geminiClient.getGenerativeModel({ model: apiModel });
         const result = await modelInstance.generateContent(prompt);
         responseText = result.response.text();
         
-        // Gemini doesn't always return token counts easily in simple responses, estimate if missing
         inputTokens = Math.ceil(prompt.length / 4);
         outputTokens = Math.ceil(responseText.length / 4);
       } 
@@ -406,7 +431,7 @@ export async function queryLLM(model, prompt, keys = {}) {
           model: apiModel,
           messages: [{ role: 'user', content: prompt }]
         });
-        responseText = response.choices[0].message.content;
+        responseText = response.choices[0].message.content || '';
         inputTokens = response.usage?.prompt_tokens || Math.ceil(prompt.length / 4);
         outputTokens = response.usage?.completion_tokens || Math.ceil(responseText.length / 4);
       } 
@@ -417,24 +442,22 @@ export async function queryLLM(model, prompt, keys = {}) {
           max_tokens: 2000,
           messages: [{ role: 'user', content: prompt }]
         });
-        responseText = response.content[0].text;
-        inputTokens = response.usage?.input_tokens || Math.ceil(prompt.length / 4);
-        outputTokens = response.usage?.output_tokens || Math.ceil(responseText.length / 4);
+        responseText = response.content[0].type === 'text' ? response.content[0].text : '';
+        inputTokens = response.usage.input_tokens || Math.ceil(prompt.length / 4);
+        outputTokens = response.usage.output_tokens || Math.ceil(responseText.length / 4);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn(`Live query failed for ${model}. Falling back to simulator. Error:`, err.message);
       isSimulated = true;
     }
   }
 
   if (isSimulated) {
-    // Generate realistic response and delay
     responseText = generateMockResponse(model, prompt);
-    inputTokens = Math.ceil(prompt.length / 3.8) + 12; // average chars per token
+    inputTokens = Math.ceil(prompt.length / 3.8) + 12;
     outputTokens = Math.ceil(responseText.length / 3.8) + 24;
     
-    // Simulate latency
-    const variation = (Math.random() - 0.2) * 0.4; // -8% to +32% variation
+    const variation = (Math.random() - 0.2) * 0.4;
     const targetLatency = modelMeta.avgLatency * (1 + variation);
     await new Promise(resolve => setTimeout(resolve, targetLatency));
   }

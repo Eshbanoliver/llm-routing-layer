@@ -1,5 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, ThumbsUp, ThumbsDown, CheckCircle2, Terminal, RefreshCw, Cpu, Clock, DollarSign, Zap } from 'lucide-react';
+import { Send, ThumbsUp, ThumbsDown, CheckCircle2, Terminal, RefreshCw, Cpu } from 'lucide-react';
+
+interface ApiKeys {
+  GEMINI_API_KEY: string;
+  OPENAI_API_KEY: string;
+  ANTHROPIC_API_KEY: string;
+}
+
+interface PlaygroundProps {
+  keys: ApiKeys;
+  useAiClassifier: boolean;
+  backendUrl: string;
+}
+
+interface TerminalLine {
+  text: string;
+  type: 'general' | 'info' | 'warning' | 'success' | 'accent';
+  id: string;
+}
+
+interface RoutingResponse {
+  success: boolean;
+  routedModel: string;
+  provider: string;
+  response: string;
+  latency: number;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  savings: number;
+  isSimulated: boolean;
+  logId: string;
+  pipelineLogs: string[];
+}
 
 const STRATEGIES = [
   { id: 'cost', title: 'Cost Minimized', desc: 'Prioritizes cheap models (Gemini Flash, GPT-4o-mini).' },
@@ -7,28 +40,26 @@ const STRATEGIES = [
   { id: 'performance', title: 'Performance First', desc: 'Focuses on top quality, routing to Sonnet/GPT-4o sooner.' },
 ];
 
-export default function Playground({ keys, useAiClassifier, backendUrl }) {
+export default function Playground({ keys, useAiClassifier, backendUrl }: PlaygroundProps) {
   const [prompt, setPrompt] = useState('');
   const [strategy, setStrategy] = useState('balanced');
   
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
+  const [result, setResult] = useState<RoutingResponse | null>(null);
   
   // Terminal logs state
-  const [terminalLines, setTerminalLines] = useState([]);
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(null);
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<'thumbs-up' | 'thumbs-down' | null>(null);
   
-  const terminalEndRef = useRef(null);
+  const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Scroll to bottom of terminal when lines update
   useEffect(() => {
     if (terminalEndRef.current) {
       terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [terminalLines]);
 
-  const addTerminalLine = (text, type = 'general', delay = 0) => {
+  const addTerminalLine = (text: string, type: 'general' | 'info' | 'warning' | 'success' | 'accent' = 'general', delay = 0): Promise<void> => {
     return new Promise((resolve) => {
       setTimeout(() => {
         setTerminalLines(prev => [...prev, { text, type, id: Math.random().toString() }]);
@@ -37,29 +68,25 @@ export default function Playground({ keys, useAiClassifier, backendUrl }) {
     });
   };
 
-  const handleRoute = async (e) => {
+  const handleRoute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
 
     setLoading(true);
-    setError('');
     setResult(null);
     setTerminalLines([]);
     setFeedbackSubmitted(null);
 
-    // Start terminal animation
     await addTerminalLine(`SYSTEM >> Initializing routing pipeline gateway...`, 'info', 100);
     await addTerminalLine(`ROUTER >> Strategy selected: ${strategy.toUpperCase()}`, 'info', 150);
     await addTerminalLine(`HEURISTICS >> Parsing prompt syntax features...`, 'general', 200);
 
-    // API query
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (keys.GEMINI_API_KEY) headers['x-gemini-key'] = keys.GEMINI_API_KEY;
     if (keys.OPENAI_API_KEY) headers['x-openai-key'] = keys.OPENAI_API_KEY;
     if (keys.ANTHROPIC_API_KEY) headers['x-anthropic-key'] = keys.ANTHROPIC_API_KEY;
 
     try {
-      // We run the fetch and terminal logs concurrently
       const apiPromise = fetch(`${backendUrl}/api/route`, {
         method: 'POST',
         headers,
@@ -70,7 +97,6 @@ export default function Playground({ keys, useAiClassifier, backendUrl }) {
         })
       });
 
-      // Animate some pending states
       await addTerminalLine(`HEURISTICS >> Character length: ${prompt.length} bytes.`, 'general', 100);
       
       if (useAiClassifier) {
@@ -84,13 +110,12 @@ export default function Playground({ keys, useAiClassifier, backendUrl }) {
         throw new Error(`Routing endpoint returned status: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as RoutingResponse;
       
-      // Print backend pipeline logs to terminal
       if (data.pipelineLogs && data.pipelineLogs.length > 0) {
         for (let i = 0; i < data.pipelineLogs.length; i++) {
           const log = data.pipelineLogs[i];
-          let type = 'general';
+          let type: 'general' | 'info' | 'warning' | 'success' | 'accent' = 'general';
           if (log.includes('Decision') || log.includes('Blended')) type = 'accent';
           else if (log.includes('Error') || log.includes('Failed')) type = 'warning';
           else if (log.includes('Received') || log.includes('complete')) type = 'success';
@@ -101,15 +126,14 @@ export default function Playground({ keys, useAiClassifier, backendUrl }) {
 
       await addTerminalLine(`SYSTEM >> Stream finalized. Output payload decoded.`, 'info', 100);
       setResult(data);
-    } catch (err) {
+    } catch (err: any) {
       await addTerminalLine(`ERROR >> Pipeline halted: ${err.message}`, 'warning', 100);
-      setError(err.message || 'Failed to communicate with router gateway.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFeedback = async (type) => {
+  const handleFeedback = async (type: 'thumbs-up' | 'thumbs-down') => {
     if (!result || !result.logId) return;
 
     try {
@@ -192,7 +216,6 @@ export default function Playground({ keys, useAiClassifier, backendUrl }) {
         {/* Results Panel */}
         {result && (
           <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Quick Metrics */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 1fr)',
@@ -222,7 +245,6 @@ export default function Playground({ keys, useAiClassifier, backendUrl }) {
               </div>
             </div>
 
-            {/* Model Response Box */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <span className="form-label">Model Output</span>
               <div className="output-scroll" style={{ maxHeight: '260px' }}>
@@ -230,7 +252,6 @@ export default function Playground({ keys, useAiClassifier, backendUrl }) {
               </div>
             </div>
 
-            {/* Feedback actions */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Was this routing decision accurate?</span>
               <div className="feedback-actions">

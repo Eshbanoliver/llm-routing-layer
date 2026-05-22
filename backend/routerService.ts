@@ -1,27 +1,44 @@
-import { queryLLM, MODEL_PRICING } from './llmProviders.js';
+import { queryLLM, MODEL_PRICING, ApiKeys, QueryResponse } from './llmProviders.js';
 import { saveLog } from './db.js';
 
+export interface RouteOptions {
+  useAiClassifier?: boolean;
+  keys?: ApiKeys;
+}
+
+export interface HeuristicResult {
+  score: number;
+  logs: string[];
+}
+
+export interface AiComplexityResult {
+  score: number;
+  reason: string;
+  logs: string[];
+}
+
+export interface RoutingResult extends QueryResponse {
+  logId: string;
+  complexityScore: number;
+  pipelineLogs: string[];
+}
+
 // Strategy-to-Model Mapping tables based on final complexity score (1 to 5)
-const STRATEGY_MAPPINGS = {
-  // Cost Minimized: Keep costs as low as possible
+const STRATEGY_MAPPINGS: Record<string, Record<number, string>> = {
   cost: {
-    1: 'gemini-1.5-flash', // Cheapest
+    1: 'gemini-1.5-flash',
     2: 'gemini-1.5-flash',
     3: 'gpt-4o-mini',
     4: 'claude-3-haiku',
-    5: 'gemini-1.5-pro'   // Medium tier but cheaper than Claude Sonnet / GPT-4o
+    5: 'gemini-1.5-pro'
   },
-  
-  // Balanced: Standard tradeoff between cost and performance
   balanced: {
     1: 'gemini-1.5-flash',
     2: 'gpt-4o-mini',
     3: 'claude-3-haiku',
     4: 'gemini-1.5-pro',
-    5: 'claude-3-5-sonnet' // Premium model only for score 5
+    5: 'claude-3-5-sonnet'
   },
-
-  // Performance Maximized: Quality first, routing to higher models sooner
   performance: {
     1: 'gpt-4o-mini',
     2: 'claude-3-haiku',
@@ -33,18 +50,16 @@ const STRATEGY_MAPPINGS = {
 
 /**
  * Heuristics-based complexity scoring
- * Analyzes string features to return a score from 1.0 to 5.0
  */
-export function evaluateHeuristics(query) {
+export function evaluateHeuristics(query: string): HeuristicResult {
   const text = query.trim();
   const len = text.length;
   
   let score = 1.0;
-  const logs = [];
+  const logs: string[] = [];
 
   logs.push(`Analyzing input prompt: length = ${len} characters.`);
 
-  // 1. Length scoring (up to +1.5 points)
   if (len > 1500) {
     score += 1.5;
     logs.push(`Length > 1500 chars (Very Long Input): adding 1.5 complexity points.`);
@@ -56,7 +71,6 @@ export function evaluateHeuristics(query) {
     logs.push(`Length > 250 chars (Medium Input): adding 0.5 complexity points.`);
   }
 
-  // 2. Code detection (up to +1.5 points)
   const codeKeywords = [
     'javascript', 'typescript', 'python', 'html', 'css', 'react', 'node', 'express',
     'function', 'class', 'import', 'const', 'let', 'def ', 'return', 'interface',
@@ -81,7 +95,6 @@ export function evaluateHeuristics(query) {
     logs.push(`Detected programming keywords: adding 0.75 complexity points.`);
   }
 
-  // 3. Logic & Math words (up to +1.0 points)
   const mathKeywords = [
     'solve', 'equation', 'calculate', 'integral', 'differential', 'derivative',
     'matrix', 'vector', 'theorem', 'proof', 'probability', 'statistics', 'optimize',
@@ -103,7 +116,6 @@ export function evaluateHeuristics(query) {
     logs.push(`Detected analytical/math keyword: adding 0.5 complexity points.`);
   }
 
-  // 4. Instructions complexity indicator (up to +1.0 points)
   const instructionsKeywords = [
     'explain in detail', 'comprehensive', 'architect', 'design a', 'step-by-step',
     'compare and contrast', 'critique', 'summarize the following', 'elaborate'
@@ -121,7 +133,6 @@ export function evaluateHeuristics(query) {
     logs.push(`Complex instruction modifier detected (e.g. "explain in detail"): adding 0.5 complexity points.`);
   }
 
-  // Cap at 5.0 and floor at 1.0
   const finalHeurScore = Math.max(1.0, Math.min(5.0, score));
   logs.push(`Heuristic scoring complete. Final score: ${finalHeurScore.toFixed(2)} / 5.0`);
 
@@ -133,14 +144,11 @@ export function evaluateHeuristics(query) {
 
 /**
  * AI-Assisted Complexity Scoring (using Gemini Flash / Simulator)
- * Queries a cheap model with a system prompt asking to classify the query from 1 to 5.
  */
-async function getAiComplexity(query, keys = {}) {
-  // If we are simulating or doing a quick check, we can return a mock or call Gemini Flash if keys are available
+async function getAiComplexity(query: string, keys: ApiKeys = {}): Promise<AiComplexityResult> {
   const hasGeminiKey = keys.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   
   if (!hasGeminiKey) {
-    // Simulated AI classification response
     const wordCount = query.split(/\s+/).length;
     let simulatedScore = 1;
     let reason = "Prompt appears to be a basic conversational greeting.";
@@ -165,7 +173,6 @@ async function getAiComplexity(query, keys = {}) {
       reason = "High-level design query requiring comprehensive architectural patterns.";
     }
 
-    // Add a slight delay to simulate API processing
     await new Promise(resolve => setTimeout(resolve, 250));
 
     return {
@@ -178,7 +185,6 @@ async function getAiComplexity(query, keys = {}) {
     };
   }
 
-  // Real AI classification using Gemini Flash
   try {
     const classificationPrompt = `You are an AI complexity routing classifier. Your job is to analyze the user's prompt and categorize its logical complexity on a scale of 1 to 5:
 1: Extremely simple (greetings, simple yes/no, quick single-token lookups).
@@ -198,10 +204,8 @@ User Prompt to classify:
 ${query}
 """`;
 
-    // Query gemini-1.5-flash as the classifier
     const classifierResult = await queryLLM('gemini-1.5-flash', classificationPrompt, keys);
     
-    // Clean response text to parse JSON
     let text = classifierResult.response.trim();
     if (text.includes('```json')) {
       text = text.substring(text.indexOf('```json') + 7, text.lastIndexOf('```')).trim();
@@ -210,7 +214,7 @@ ${query}
     }
 
     const data = JSON.parse(text);
-    const score = Math.max(1, Math.min(5, parseInt(data.complexityScore || 1)));
+    const score = Math.max(1, Math.min(5, parseInt(data.complexityScore || '1')));
     const reason = data.reasoning || "Analyzed by classifier model.";
 
     return {
@@ -221,9 +225,9 @@ ${query}
         `[AI Classifier - Live] Classification result: Score ${score} (Reason: ${reason})`
       ]
     };
-  } catch (err) {
+  } catch (err: any) {
     return {
-      score: 3, // Safe default in case of error
+      score: 3,
       reason: `Failed to classify: ${err.message}. Defaulting to score 3.`,
       logs: [
         `[AI Classifier - Error] Classification request failed: ${err.message}`,
@@ -236,17 +240,15 @@ ${query}
 /**
  * Route and execute the query
  */
-export async function routeQuery(query, strategy = 'balanced', options = {}) {
-  const steps = [];
+export async function routeQuery(query: string, strategy: string = 'balanced', options: RouteOptions = {}): Promise<RoutingResult> {
+  const steps: string[] = [];
   steps.push(`Initializing routing pipeline using strategy: "${strategy.toUpperCase()}"`);
 
-  // 1. Run Heuristic analysis
   const heuristicResult = evaluateHeuristics(query);
   steps.push(...heuristicResult.logs);
 
-  // 2. Run AI Analysis (if enabled or defaulted)
   const useAiClassifier = options.useAiClassifier !== false;
-  let aiScore = heuristicResult.score; // Fallback to heuristic
+  let aiScore = heuristicResult.score;
   let aiReason = "AI classification skipped.";
 
   if (useAiClassifier) {
@@ -257,8 +259,6 @@ export async function routeQuery(query, strategy = 'balanced', options = {}) {
     steps.push(...aiResult.logs);
   }
 
-  // 3. Compute final blended score
-  // Blended formula: 40% heuristic, 60% AI classifier
   const blendedScore = useAiClassifier 
     ? (heuristicResult.score * 0.4) + (aiScore * 0.6)
     : heuristicResult.score;
@@ -266,19 +266,16 @@ export async function routeQuery(query, strategy = 'balanced', options = {}) {
   const roundedScore = Math.max(1, Math.min(5, Math.round(blendedScore)));
   steps.push(`Blended Complexity Score: ${blendedScore.toFixed(2)} → Rounded Score: ${roundedScore}`);
 
-  // 4. Select model
   const strategyMap = STRATEGY_MAPPINGS[strategy] || STRATEGY_MAPPINGS.balanced;
   const selectedModel = strategyMap[roundedScore];
   const modelName = MODEL_PRICING[selectedModel].name;
   
   steps.push(`Routing Decision: Forwarding query to **${modelName}** (${selectedModel})`);
 
-  // 5. Query the model
   steps.push(`Dispatching query request to ${selectedModel}...`);
   const result = await queryLLM(selectedModel, query, options.keys);
   steps.push(`Received response from ${selectedModel} (Latency: ${result.latency}ms, Simulated: ${result.isSimulated})`);
 
-  // 6. Log in Database
   const logEntry = saveLog({
     query,
     strategy,

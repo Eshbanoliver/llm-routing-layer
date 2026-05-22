@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { LayoutDashboard, Cpu, Columns, Settings as SettingsIcon, Layers } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Playground from './components/Playground';
@@ -7,14 +7,22 @@ import Settings from './components/Settings';
 
 const BACKEND_URL = 'http://localhost:5000';
 
+type PageType = 'dashboard' | 'playground' | 'compare' | 'settings';
+
+interface ApiKeys {
+  GEMINI_API_KEY: string;
+  OPENAI_API_KEY: string;
+  ANTHROPIC_API_KEY: string;
+}
+
 export default function App() {
-  const [activePage, setActivePage] = useState('dashboard');
-  const [keys, setKeys] = useState({
+  const [activePage, setActivePage] = useState<PageType>('dashboard');
+  const [keys, setKeys] = useState<ApiKeys>({
     GEMINI_API_KEY: '',
     OPENAI_API_KEY: '',
     ANTHROPIC_API_KEY: ''
   });
-  const [useAiClassifier, setUseAiClassifier] = useState(true);
+  const [useAiClassifier, setUseAiClassifier] = useState<boolean>(true);
 
   // Load configuration keys from sessionStorage on mount
   useEffect(() => {
@@ -34,7 +42,7 @@ export default function App() {
   }, []);
 
   // Save classifier setting
-  const updateClassifier = (val) => {
+  const updateClassifier = (val: boolean) => {
     setUseAiClassifier(val);
     sessionStorage.setItem('use_ai_classifier', val.toString());
   };

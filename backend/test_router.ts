@@ -1,10 +1,16 @@
-import fetch from 'node-fetch'; // wait, since node-fetch is not installed (it's not in package.json), but modern node v24 has global fetch built-in!
-// We can use the native global fetch directly since we are on node v24.13.0!
+// test_router.ts verification script
+// Since node v24 has global fetch built-in, we use it directly
+
+interface TestQuery {
+  query: string;
+  strategy: string;
+  expectedTier: string;
+}
 
 async function runTest() {
-  console.log('--- Starting Routing Verification Test ---');
+  console.log('--- Starting Routing Verification Test (TypeScript) ---');
   
-  const testQueries = [
+  const testQueries: TestQuery[] = [
     {
       query: 'Hello there! What is the capital of France?',
       strategy: 'balanced',
@@ -41,7 +47,7 @@ async function runTest() {
       console.log(`- Latency: ${data.latency}ms`);
       console.log(`- Cost: $${data.cost}`);
       console.log(`- Response preview: ${data.response.substring(0, 150).replace(/\n/g, ' ')}...`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('✗ Test failed:', error.message);
     }
   }
@@ -55,9 +61,10 @@ async function runTest() {
     console.log(`- Total Queries logged: ${stats.totalQueries}`);
     console.log(`- Total Savings: $${stats.totalSavings}`);
     console.log(`- Distribution:`, stats.modelDistribution);
-  } catch (error) {
+  } catch (error: any) {
     console.error('✗ Stats test failed:', error.message);
   }
 }
 
 runTest();
+export {};

@@ -1,10 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, Database, DollarSign, Clock, CheckCircle2, ChevronRight, BarChart2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { RefreshCw, Database, DollarSign, Clock, CheckCircle2, BarChart2 } from 'lucide-react';
 
-export default function Dashboard({ backendUrl }) {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+interface LogEntry {
+  id: string;
+  timestamp: string;
+  query: string;
+  complexityScore: number;
+  routedModel: string;
+  latency: number;
+  cost: number;
+  feedback?: 'thumbs-up' | 'thumbs-down' | null;
+}
+
+interface StatsData {
+  totalQueries: number;
+  successRate: number;
+  totalCost: number;
+  totalSavings: number;
+  avgLatency: number;
+  modelDistribution: Record<string, number>;
+  history: LogEntry[];
+}
+
+interface DashboardProps {
+  backendUrl: string;
+}
+
+export default function Dashboard({ backendUrl }: DashboardProps) {
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>('');
 
   const fetchStats = async () => {
     setLoading(true);
@@ -16,7 +41,7 @@ export default function Dashboard({ backendUrl }) {
       }
       const data = await response.json();
       setStats(data);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message || 'Could not connect to backend telemetry API.');
     } finally {
       setLoading(false);
@@ -54,8 +79,8 @@ export default function Dashboard({ backendUrl }) {
     : 1;
 
   // Generate model labels formatting
-  const formatModelLabel = (modelId) => {
-    const names = {
+  const formatModelLabel = (modelId: string) => {
+    const names: Record<string, string> = {
       'gemini-1.5-flash': 'Gemini 1.5 Flash',
       'gpt-4o-mini': 'GPT-4o Mini',
       'gemini-1.5-pro': 'Gemini 1.5 Pro',
@@ -66,7 +91,7 @@ export default function Dashboard({ backendUrl }) {
     return names[modelId] || modelId;
   };
 
-  const getModelClass = (modelId) => {
+  const getModelClass = (modelId: string) => {
     if (modelId.includes('gemini')) return 'google';
     if (modelId.includes('gpt')) return 'openai';
     return 'anthropic';
@@ -86,6 +111,13 @@ export default function Dashboard({ backendUrl }) {
           Refresh Stats
         </button>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '0.9rem' }}>
+          {error}
+        </div>
+      )}
 
       {/* Metrics Cards Grid */}
       <div className="stats-grid">
@@ -165,7 +197,7 @@ export default function Dashboard({ backendUrl }) {
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
-                    <span className="bar-value">{count} ({Math.round((count / totalQueries) * 100)}%)</span>
+                    <span className="bar-value">{count} ({Math.round((count / (totalQueries || 1)) * 100)}%)</span>
                   </div>
                 );
               })}

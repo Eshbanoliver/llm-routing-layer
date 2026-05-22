@@ -1,6 +1,29 @@
 import React, { useState } from 'react';
 import { Columns, Send, Sparkles, AlertCircle, Clock, Coins, Layers } from 'lucide-react';
 
+interface ApiKeys {
+  GEMINI_API_KEY: string;
+  OPENAI_API_KEY: string;
+  ANTHROPIC_API_KEY: string;
+}
+
+interface CompareProps {
+  keys: ApiKeys;
+  backendUrl: string;
+}
+
+interface ComparisonResult {
+  model: string;
+  success: boolean;
+  response?: string;
+  error?: string;
+  latency?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cost?: number;
+  isSimulated?: boolean;
+}
+
 const COMPARABLE_MODELS = [
   { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'Google', tier: 'Low Cost' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', tier: 'Low Cost' },
@@ -10,14 +33,14 @@ const COMPARABLE_MODELS = [
   { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', tier: 'High Quality' },
 ];
 
-export default function Compare({ keys, backendUrl }) {
+export default function Compare({ keys, backendUrl }: CompareProps) {
   const [prompt, setPrompt] = useState('');
-  const [selectedModels, setSelectedModels] = useState(['gemini-1.5-flash', 'gpt-4o-mini', 'gpt-4o', 'claude-3-5-sonnet']);
+  const [selectedModels, setSelectedModels] = useState<string[]>(['gemini-1.5-flash', 'gpt-4o-mini', 'gpt-4o', 'claude-3-5-sonnet']);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState<ComparisonResult[] | null>(null);
   const [error, setError] = useState('');
 
-  const toggleModel = (modelId) => {
+  const toggleModel = (modelId: string) => {
     if (selectedModels.includes(modelId)) {
       if (selectedModels.length > 1) {
         setSelectedModels(selectedModels.filter(id => id !== modelId));
@@ -27,7 +50,7 @@ export default function Compare({ keys, backendUrl }) {
     }
   };
 
-  const handleCompare = async (e) => {
+  const handleCompare = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
 
@@ -35,8 +58,7 @@ export default function Compare({ keys, backendUrl }) {
     setError('');
     setResults(null);
 
-    // Build headers from API Keys
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     };
     if (keys.GEMINI_API_KEY) headers['x-gemini-key'] = keys.GEMINI_API_KEY;
@@ -59,15 +81,15 @@ export default function Compare({ keys, backendUrl }) {
 
       const data = await response.json();
       setResults(data.results);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message || 'Network connection failed.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Find cheapest and fastest from success results
-  const successResults = results ? results.filter(r => r.success) : [];
+  const successResults = results ? results.filter((r): r is Required<ComparisonResult> => r.success) : [];
+  
   const cheapestResult = successResults.length > 0 
     ? successResults.reduce((min, curr) => curr.cost < min.cost ? curr : min, successResults[0]) 
     : null;
@@ -181,7 +203,7 @@ export default function Compare({ keys, backendUrl }) {
                 <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#fff' }}>Routing Efficiency Insight</h4>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem', lineHeight: '1.4' }}>
                   The cheapest response was provided by <strong>{cheapestResult.model}</strong> (${cheapestResult.cost.toFixed(6)}) which is 
-                  {' '}<strong>{Math.round((successResults.find(r => r.model.includes('sonnet') || r.model.includes('gpt-4o') && !r.model.includes('mini'))?.cost / cheapestResult.cost) || 15)}x cheaper</strong> than routing blindly to a premium model. 
+                  {' '}<strong>{Math.round((successResults.find(r => r.model.includes('sonnet') || r.model.includes('gpt-4o') && !r.model.includes('mini'))?.cost || 0.012) / (cheapestResult.cost || 0.0001))}x cheaper</strong> than routing blindly to a premium model. 
                   The fastest model was <strong>{fastestResult?.model}</strong> responding in <strong>{fastestResult?.latency}ms</strong>.
                 </p>
               </div>
@@ -255,7 +277,7 @@ export default function Compare({ keys, backendUrl }) {
                           Cost
                         </span>
                         <span className="compare-meta-val" style={{ color: isCheapest ? 'var(--accent-cyan)' : 'inherit' }}>
-                          ${result.cost.toFixed(6)}
+                          ${result.cost?.toFixed(6)}
                         </span>
                       </div>
 
@@ -265,7 +287,7 @@ export default function Compare({ keys, backendUrl }) {
                           Tokens
                         </span>
                         <span className="compare-meta-val">
-                          {result.inputTokens + result.outputTokens}
+                          {(result.inputTokens || 0) + (result.outputTokens || 0)}
                         </span>
                       </div>
                     </div>

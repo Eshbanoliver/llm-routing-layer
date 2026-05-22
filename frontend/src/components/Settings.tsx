@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Key, ShieldAlert, Database, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Key, ShieldAlert, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function Settings({ keys, setKeys, useAiClassifier, setUseAiClassifier, backendUrl }) {
+interface ApiKeys {
+  GEMINI_API_KEY: string;
+  OPENAI_API_KEY: string;
+  ANTHROPIC_API_KEY: string;
+}
+
+interface SettingsProps {
+  keys: ApiKeys;
+  setKeys: React.Dispatch<React.SetStateAction<ApiKeys>>;
+  useAiClassifier: boolean;
+  setUseAiClassifier: (val: boolean) => void;
+  backendUrl: string;
+}
+
+export default function Settings({ keys, setKeys, useAiClassifier, setUseAiClassifier, backendUrl }: SettingsProps) {
   const [geminiInput, setGeminiInput] = useState(keys.GEMINI_API_KEY || '');
   const [openaiInput, setOpenaiInput] = useState(keys.OPENAI_API_KEY || '');
   const [anthropicInput, setAnthropicInput] = useState(keys.ANTHROPIC_API_KEY || '');
@@ -10,23 +24,21 @@ export default function Settings({ keys, setKeys, useAiClassifier, setUseAiClass
   const [isClearing, setIsClearing] = useState(false);
   const [clearMessage, setClearMessage] = useState('');
 
-  // Keep local fields in sync with props
   useEffect(() => {
     setGeminiInput(keys.GEMINI_API_KEY || '');
     setOpenaiInput(keys.OPENAI_API_KEY || '');
     setAnthropicInput(keys.ANTHROPIC_API_KEY || '');
   }, [keys]);
 
-  const handleSave = (e) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedKeys = {
+    const updatedKeys: ApiKeys = {
       GEMINI_API_KEY: geminiInput.trim(),
       OPENAI_API_KEY: openaiInput.trim(),
       ANTHROPIC_API_KEY: anthropicInput.trim()
     };
     setKeys(updatedKeys);
     
-    // Save to session storage
     sessionStorage.setItem('llm_routing_keys', JSON.stringify(updatedKeys));
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);

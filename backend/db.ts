@@ -18,6 +18,48 @@ if (!fs.existsSync(DB_FILE)) {
   fs.writeFileSync(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
 }
 
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  query: string;
+  strategy: string;
+  heuristicScore: number;
+  aiScore: number | null;
+  complexityScore: number;
+  routedModel: string;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  savings: number;
+  latency: number;
+  success: boolean;
+  response: string;
+  isSimulated: boolean;
+  pipelineLogs: string[];
+  feedback: 'thumbs-up' | 'thumbs-down' | null;
+}
+
+export interface StatsResult {
+  totalQueries: number;
+  successRate: number;
+  totalCost: number;
+  totalSavings: number;
+  avgLatency: number;
+  modelDistribution: Record<string, number>;
+  history: Array<{
+    id: string;
+    timestamp: string;
+    query: string;
+    complexityScore: number;
+    routedModel: string;
+    cost: number;
+    savings: number;
+    latency: number;
+    success: boolean;
+    feedback: 'thumbs-up' | 'thumbs-down' | null;
+  }>;
+}
+
 // Standard costs (per 1M tokens) for comparison
 // We use Claude 3.5 Sonnet as the "benchmark premium model" to compare against for savings
 const PREMIUM_MODEL_COSTS = {
@@ -25,7 +67,7 @@ const PREMIUM_MODEL_COSTS = {
   output: 15.00 / 1000000  // $15.00 per M tokens
 };
 
-export function getLogs() {
+export function getLogs(): LogEntry[] {
   try {
     const data = fs.readFileSync(DB_FILE, 'utf-8');
     return JSON.parse(data || '[]');
@@ -35,7 +77,7 @@ export function getLogs() {
   }
 }
 
-export function saveLog(logData) {
+export function saveLog(logData: Partial<LogEntry> & { query: string; success: boolean; inputTokens: number; outputTokens: number; cost: number }): LogEntry {
   try {
     const logs = getLogs();
     
@@ -49,11 +91,25 @@ export function saveLog(logData) {
       logData.savings = Math.max(0, premiumCost - actualCost);
     }
 
-    const newLog = {
+    const newLog: LogEntry = {
       id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       timestamp: new Date().toISOString(),
-      feedback: null,
-      ...logData
+      query: logData.query,
+      strategy: logData.strategy || 'balanced',
+      heuristicScore: logData.heuristicScore || 0,
+      aiScore: logData.aiScore !== undefined ? logData.aiScore : null,
+      complexityScore: logData.complexityScore || 0,
+      routedModel: logData.routedModel || 'unknown',
+      inputTokens: logData.inputTokens,
+      outputTokens: logData.outputTokens,
+      cost: logData.cost,
+      savings: logData.savings || 0,
+      latency: logData.latency || 0,
+      success: logData.success,
+      response: logData.response || '',
+      isSimulated: logData.isSimulated || false,
+      pipelineLogs: logData.pipelineLogs || [],
+      feedback: null
     };
 
     logs.push(newLog);
@@ -61,16 +117,16 @@ export function saveLog(logData) {
     return newLog;
   } catch (error) {
     console.error('Error saving log to db:', error);
-    return logData;
+    throw error;
   }
 }
 
-export function updateFeedback(id, feedbackType) {
+export function updateFeedback(id: string, feedbackType: 'thumbs-up' | 'thumbs-down'): LogEntry | null {
   try {
     const logs = getLogs();
     const index = logs.findIndex(log => log.id === id);
     if (index !== -1) {
-      logs[index].feedback = feedbackType; // 'thumbs-up' or 'thumbs-down'
+      logs[index].feedback = feedbackType;
       fs.writeFileSync(DB_FILE, JSON.stringify(logs, null, 2), 'utf-8');
       return logs[index];
     }
@@ -81,7 +137,7 @@ export function updateFeedback(id, feedbackType) {
   }
 }
 
-export function getStats() {
+export function getStats(): StatsResult {
   const logs = getLogs();
   const successfulLogs = logs.filter(log => log.success);
   
@@ -92,7 +148,7 @@ export function getStats() {
   let totalSavings = 0;
   let totalLatency = 0;
   
-  const modelDistribution = {};
+  const modelDistribution: Record<string, number> = {};
   
   successfulLogs.forEach(log => {
     totalCost += log.cost || 0;
@@ -127,7 +183,7 @@ export function getStats() {
   };
 }
 
-export function clearLogs() {
+export function clearLogs(): boolean {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
     return true;

@@ -5,8 +5,9 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node dist/server.js",
+    "dev": "tsx watch server.ts",
+    "build": "tsc"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
@@ -15,5 +16,12 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "openai": "^4.82.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
   }
 }
