@@ -1,0 +1,19 @@
+# Node modules
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Local databases & logs
+backend/data/*.json
+
+# Env keys
+.env
+backend/.env
+
+# Build outputs
+dist/
+frontend/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
