@@ -53,16 +53,25 @@ export default function Playground({ keys, useAiClassifier, backendUrl }: Playgr
   
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
+  const queryIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
+    isMountedRef.current = true;
     if (terminalEndRef.current) {
       terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
+    return () => {
+      isMountedRef.current = false;
+    };
   }, [terminalLines]);
 
-  const addTerminalLine = (text: string, type: 'general' | 'info' | 'warning' | 'success' | 'accent' = 'general', delay = 0): Promise<void> => {
+  const addTerminalLine = (text: string, type: 'general' | 'info' | 'warning' | 'success' | 'accent' = 'general', delay = 0, targetQueryId: number): Promise<void> => {
     return new Promise((resolve) => {
       setTimeout(() => {
-        setTerminalLines(prev => [...prev, { text, type, id: Math.random().toString() }]);
+        if (isMountedRef.current && queryIdRef.current === targetQueryId) {
+          setTerminalLines(prev => [...prev, { text, type, id: Math.random().toString() }]);
+        }
         resolve();
       }, delay);
     });
@@ -72,14 +81,19 @@ export default function Playground({ keys, useAiClassifier, backendUrl }: Playgr
     e.preventDefault();
     if (!prompt.trim()) return;
 
+    const currentQueryId = ++queryIdRef.current;
+
     setLoading(true);
     setResult(null);
     setTerminalLines([]);
     setFeedbackSubmitted(null);
 
-    await addTerminalLine(`SYSTEM >> Initializing routing pipeline gateway...`, 'info', 100);
-    await addTerminalLine(`ROUTER >> Strategy selected: ${strategy.toUpperCase()}`, 'info', 150);
-    await addTerminalLine(`HEURISTICS >> Parsing prompt syntax features...`, 'general', 200);
+    await addTerminalLine(`SYSTEM >> Initializing routing pipeline gateway...`, 'info', 100, currentQueryId);
+    if (queryIdRef.current !== currentQueryId) return;
+    await addTerminalLine(`ROUTER >> Strategy selected: ${strategy.toUpperCase()}`, 'info', 150, currentQueryId);
+    if (queryIdRef.current !== currentQueryId) return;
+    await addTerminalLine(`HEURISTICS >> Parsing prompt syntax features...`, 'general', 200, currentQueryId);
+    if (queryIdRef.current !== currentQueryId) return;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -99,20 +113,25 @@ export default function Playground({ keys, useAiClassifier, backendUrl }: Playgr
         })
       });
 
-      await addTerminalLine(`HEURISTICS >> Character length: ${prompt.length} bytes.`, 'general', 100);
+      await addTerminalLine(`HEURISTICS >> Character length: ${prompt.length} bytes.`, 'general', 100, currentQueryId);
+      if (queryIdRef.current !== currentQueryId) return;
       
       if (useAiClassifier) {
-        await addTerminalLine(`AI_CLASSIFIER >> Sending prompt to fast classification pass...`, 'warning', 100);
+        await addTerminalLine(`AI_CLASSIFIER >> Sending prompt to fast classification pass...`, 'warning', 100, currentQueryId);
       } else {
-        await addTerminalLine(`SYSTEM >> AI Classifier disabled by user. Relying on heuristics.`, 'info', 50);
+        await addTerminalLine(`SYSTEM >> AI Classifier disabled by user. Relying on heuristics.`, 'info', 50, currentQueryId);
       }
+      if (queryIdRef.current !== currentQueryId) return;
 
       const response = await apiPromise;
+      if (queryIdRef.current !== currentQueryId) return;
+
       if (!response.ok) {
         throw new Error(`Routing endpoint returned status: ${response.status}`);
       }
 
       const data = await response.json() as RoutingResponse;
+      if (queryIdRef.current !== currentQueryId) return;
       
       if (data.pipelineLogs && data.pipelineLogs.length > 0) {
         for (let i = 0; i < data.pipelineLogs.length; i++) {
@@ -122,16 +141,22 @@ export default function Playground({ keys, useAiClassifier, backendUrl }: Playgr
           else if (log.includes('Error') || log.includes('Failed')) type = 'warning';
           else if (log.includes('Received') || log.includes('complete')) type = 'success';
           
-          await addTerminalLine(log, type, 80);
+          await addTerminalLine(log, type, 80, currentQueryId);
+          if (queryIdRef.current !== currentQueryId) return;
         }
       }
 
-      await addTerminalLine(`SYSTEM >> Stream finalized. Output payload decoded.`, 'info', 100);
+      await addTerminalLine(`SYSTEM >> Stream finalized. Output payload decoded.`, 'info', 100, currentQueryId);
+      if (queryIdRef.current !== currentQueryId) return;
       setResult(data);
     } catch (err: any) {
-      await addTerminalLine(`ERROR >> Pipeline halted: ${err.message}`, 'warning', 100);
+      if (queryIdRef.current === currentQueryId) {
+        await addTerminalLine(`ERROR >> Pipeline halted: ${err.message}`, 'warning', 100, currentQueryId);
+      }
     } finally {
-      setLoading(false);
+      if (queryIdRef.current === currentQueryId) {
+        setLoading(false);
+      }
     }
   };
 

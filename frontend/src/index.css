@@ -859,3 +859,13 @@ input:checked + .slider:before {
     grid-template-columns: 1fr;
   }
 }
+
+/* Spinner Animation Keyframes */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
