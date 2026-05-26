@@ -90,51 +90,9 @@ export const MODEL_PRICING: Record<string, ModelMetadata> = {
 };
 
 // Initialize real clients if keys are present
-let geminiClient: GoogleGenerativeAI | null = null;
-let openaiClient: OpenAI | null = null;
-let anthropicClient: Anthropic | null = null;
-
 export function initializeClients(keys: ApiKeys = {}): void {
-  const geminiKey = keys.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  const openaiKey = keys.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-  const anthropicKey = keys.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
-
-  if (geminiKey) {
-    try {
-      geminiClient = new GoogleGenerativeAI(geminiKey);
-      console.log('Gemini client initialized successfully.');
-    } catch (e: any) {
-      console.error('Failed to init Gemini client:', e.message);
-    }
-  } else {
-    geminiClient = null;
-  }
-
-  if (openaiKey) {
-    try {
-      openaiClient = new OpenAI({ apiKey: openaiKey });
-      console.log('OpenAI client initialized successfully.');
-    } catch (e: any) {
-      console.error('Failed to init OpenAI client:', e.message);
-    }
-  } else {
-    openaiClient = null;
-  }
-
-  if (anthropicKey) {
-    try {
-      anthropicClient = new Anthropic({ apiKey: anthropicKey });
-      console.log('Anthropic client initialized successfully.');
-    } catch (e: any) {
-      console.error('Failed to init Anthropic client:', e.message);
-    }
-  } else {
-    anthropicClient = null;
-  }
+  // Deprecated: Clients are now dynamically initialized inside queryLLM to prevent multi-request state leakage.
 }
-
-// Automatically init with process.env keys on load
-initializeClients();
 
 /**
  * Generate a smart response mock when API keys are not provided
@@ -401,9 +359,9 @@ export async function queryLLM(model: string, prompt: string, keys: ApiKeys = {}
   let isSimulated = true;
 
   // Decide if we should run in live mode
-  const geminiKey = keys.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  const openaiKey = keys.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-  const anthropicKey = keys.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+  const geminiKey = keys.GEMINI_API_KEY !== undefined ? keys.GEMINI_API_KEY : process.env.GEMINI_API_KEY;
+  const openaiKey = keys.OPENAI_API_KEY !== undefined ? keys.OPENAI_API_KEY : process.env.OPENAI_API_KEY;
+  const anthropicKey = keys.ANTHROPIC_API_KEY !== undefined ? keys.ANTHROPIC_API_KEY : process.env.ANTHROPIC_API_KEY;
 
   const runLive = 
     (modelMeta.provider === 'google' && geminiKey) ||
@@ -413,21 +371,20 @@ export async function queryLLM(model: string, prompt: string, keys: ApiKeys = {}
   if (runLive) {
     isSimulated = false;
     try {
-      // Re-initialize dynamic keys if provided on request
-      initializeClients(keys);
-
-      if (modelMeta.provider === 'google' && geminiClient) {
+      if (modelMeta.provider === 'google' && geminiKey) {
+        const client = new GoogleGenerativeAI(geminiKey);
         const apiModel = model === 'gemini-1.5-flash' ? 'gemini-1.5-flash' : 'gemini-1.5-pro';
-        const modelInstance = geminiClient.getGenerativeModel({ model: apiModel });
+        const modelInstance = client.getGenerativeModel({ model: apiModel });
         const result = await modelInstance.generateContent(prompt);
         responseText = result.response.text();
         
         inputTokens = Math.ceil(prompt.length / 4);
         outputTokens = Math.ceil(responseText.length / 4);
       } 
-      else if (modelMeta.provider === 'openai' && openaiClient) {
+      else if (modelMeta.provider === 'openai' && openaiKey) {
+        const client = new OpenAI({ apiKey: openaiKey });
         const apiModel = model === 'gpt-4o-mini' ? 'gpt-4o-mini' : 'gpt-4o';
-        const response = await openaiClient.chat.completions.create({
+        const response = await client.chat.completions.create({
           model: apiModel,
           messages: [{ role: 'user', content: prompt }]
         });
@@ -435,14 +392,16 @@ export async function queryLLM(model: string, prompt: string, keys: ApiKeys = {}
         inputTokens = response.usage?.prompt_tokens || Math.ceil(prompt.length / 4);
         outputTokens = response.usage?.completion_tokens || Math.ceil(responseText.length / 4);
       } 
-      else if (modelMeta.provider === 'anthropic' && anthropicClient) {
+      else if (modelMeta.provider === 'anthropic' && anthropicKey) {
+        const client = new Anthropic({ apiKey: anthropicKey });
         const apiModel = model === 'claude-3-5-sonnet' ? 'claude-3-5-sonnet-20241022' : 'claude-3-haiku-20240307';
-        const response = await anthropicClient.messages.create({
+        const response = await client.messages.create({
           model: apiModel,
           max_tokens: 2000,
           messages: [{ role: 'user', content: prompt }]
         });
-        responseText = response.content[0].type === 'text' ? response.content[0].text : '';
+        const firstBlock = response.content && response.content[0];
+        responseText = (firstBlock && firstBlock.type === 'text') ? firstBlock.text : '';
         inputTokens = response.usage.input_tokens || Math.ceil(prompt.length / 4);
         outputTokens = response.usage.output_tokens || Math.ceil(responseText.length / 4);
       }

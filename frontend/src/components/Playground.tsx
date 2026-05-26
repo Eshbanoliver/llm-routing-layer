@@ -81,10 +81,12 @@ export default function Playground({ keys, useAiClassifier, backendUrl }: Playgr
     await addTerminalLine(`ROUTER >> Strategy selected: ${strategy.toUpperCase()}`, 'info', 150);
     await addTerminalLine(`HEURISTICS >> Parsing prompt syntax features...`, 'general', 200);
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (keys.GEMINI_API_KEY) headers['x-gemini-key'] = keys.GEMINI_API_KEY;
-    if (keys.OPENAI_API_KEY) headers['x-openai-key'] = keys.OPENAI_API_KEY;
-    if (keys.ANTHROPIC_API_KEY) headers['x-anthropic-key'] = keys.ANTHROPIC_API_KEY;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-gemini-key': keys.GEMINI_API_KEY || '',
+      'x-openai-key': keys.OPENAI_API_KEY || '',
+      'x-anthropic-key': keys.ANTHROPIC_API_KEY || ''
+    };
 
     try {
       const apiPromise = fetch(`${backendUrl}/api/route`, {

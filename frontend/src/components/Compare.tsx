@@ -59,11 +59,11 @@ export default function Compare({ keys, backendUrl }: CompareProps) {
     setResults(null);
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'x-gemini-key': keys.GEMINI_API_KEY || '',
+      'x-openai-key': keys.OPENAI_API_KEY || '',
+      'x-anthropic-key': keys.ANTHROPIC_API_KEY || ''
     };
-    if (keys.GEMINI_API_KEY) headers['x-gemini-key'] = keys.GEMINI_API_KEY;
-    if (keys.OPENAI_API_KEY) headers['x-openai-key'] = keys.OPENAI_API_KEY;
-    if (keys.ANTHROPIC_API_KEY) headers['x-anthropic-key'] = keys.ANTHROPIC_API_KEY;
 
     try {
       const response = await fetch(`${backendUrl}/api/compare`, {

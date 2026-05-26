@@ -16,9 +16,9 @@ app.use(express.json());
 // Helper to extract keys from headers
 function getKeysFromHeaders(req: Request): ApiKeys {
   return {
-    GEMINI_API_KEY: (req.headers['x-gemini-key'] as string) || null,
-    OPENAI_API_KEY: (req.headers['x-openai-key'] as string) || null,
-    ANTHROPIC_API_KEY: (req.headers['x-anthropic-key'] as string) || null
+    GEMINI_API_KEY: req.headers['x-gemini-key'] !== undefined ? (req.headers['x-gemini-key'] as string) : undefined,
+    OPENAI_API_KEY: req.headers['x-openai-key'] !== undefined ? (req.headers['x-openai-key'] as string) : undefined,
+    ANTHROPIC_API_KEY: req.headers['x-anthropic-key'] !== undefined ? (req.headers['x-anthropic-key'] as string) : undefined
   };
 }
 
