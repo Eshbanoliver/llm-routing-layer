@@ -49,6 +49,17 @@ const STRATEGY_MAPPINGS: Record<string, Record<number, string>> = {
 };
 
 /**
+ * Helper to match keywords using word boundaries to prevent false substring matches (e.g. 'solve' matching 'dissolve')
+ */
+function matchesKeyword(text: string, kw: string): boolean {
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const startBoundary = /^\w/.test(kw) ? '\\b' : '';
+  const endBoundary = /\w$/.test(kw) ? '\\b' : '';
+  const regex = new RegExp(startBoundary + escaped + endBoundary, 'i');
+  return regex.test(text);
+}
+
+/**
  * Heuristics-based complexity scoring
  */
 export function evaluateHeuristics(query: string): HeuristicResult {
@@ -82,7 +93,7 @@ export function evaluateHeuristics(query: string): HeuristicResult {
   let codeKeywordCount = 0;
   
   codeKeywords.forEach(kw => {
-    if (text.toLowerCase().includes(kw)) {
+    if (matchesKeyword(text, kw)) {
       codeKeywordCount++;
     }
   });
@@ -103,7 +114,7 @@ export function evaluateHeuristics(query: string): HeuristicResult {
   
   let mathKeywordCount = 0;
   mathKeywords.forEach(kw => {
-    if (text.toLowerCase().includes(kw)) {
+    if (matchesKeyword(text, kw)) {
       mathKeywordCount++;
     }
   });
@@ -123,7 +134,7 @@ export function evaluateHeuristics(query: string): HeuristicResult {
 
   let instructionCount = 0;
   instructionsKeywords.forEach(kw => {
-    if (text.toLowerCase().includes(kw)) {
+    if (matchesKeyword(text, kw)) {
       instructionCount++;
     }
   });
