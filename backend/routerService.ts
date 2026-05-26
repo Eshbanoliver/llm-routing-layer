@@ -276,7 +276,7 @@ export async function routeQuery(query: string, strategy: string = 'balanced', o
   const result = await queryLLM(selectedModel, query, options.keys);
   steps.push(`Received response from ${selectedModel} (Latency: ${result.latency}ms, Simulated: ${result.isSimulated})`);
 
-  const logEntry = saveLog({
+  const logEntry = await saveLog({
     query,
     strategy,
     heuristicScore: heuristicResult.score,

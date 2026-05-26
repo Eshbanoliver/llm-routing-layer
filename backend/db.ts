@@ -67,19 +67,33 @@ const PREMIUM_MODEL_COSTS = {
   output: 15.00 / 1000000  // $15.00 per M tokens
 };
 
-export function getLogs(): LogEntry[] {
+export async function getLogs(): Promise<LogEntry[]> {
   try {
-    const data = fs.readFileSync(DB_FILE, 'utf-8');
+    const data = await fs.promises.readFile(DB_FILE, 'utf-8');
     return JSON.parse(data || '[]');
   } catch (error) {
     console.error('Error reading db file:', error);
+    // Check if the file is corrupted (i.e. exists and is not empty but failed to parse)
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        const stats = await fs.promises.stat(DB_FILE);
+        if (stats.size > 0) {
+          const corruptedBackupPath = path.join(DATA_DIR, `metrics.json.corrupted_${Date.now()}`);
+          await fs.promises.rename(DB_FILE, corruptedBackupPath);
+          console.warn(`Database file corrupted. Backed up to ${corruptedBackupPath} and initialized a new database.`);
+          await fs.promises.writeFile(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
+        }
+      }
+    } catch (backupError) {
+      console.error('Failed to create backup of corrupted database:', backupError);
+    }
     return [];
   }
 }
 
-export function saveLog(logData: Partial<LogEntry> & { query: string; success: boolean; inputTokens: number; outputTokens: number; cost: number }): LogEntry {
+export async function saveLog(logData: Partial<LogEntry> & { query: string; success: boolean; inputTokens: number; outputTokens: number; cost: number }): Promise<LogEntry> {
   try {
-    const logs = getLogs();
+    const logs = await getLogs();
     
     // Add default savings calculation if not provided
     if (logData.success && typeof logData.savings === 'undefined') {
@@ -113,7 +127,7 @@ export function saveLog(logData: Partial<LogEntry> & { query: string; success: b
     };
 
     logs.push(newLog);
-    fs.writeFileSync(DB_FILE, JSON.stringify(logs, null, 2), 'utf-8');
+    await fs.promises.writeFile(DB_FILE, JSON.stringify(logs, null, 2), 'utf-8');
     return newLog;
   } catch (error) {
     console.error('Error saving log to db:', error);
@@ -121,13 +135,13 @@ export function saveLog(logData: Partial<LogEntry> & { query: string; success: b
   }
 }
 
-export function updateFeedback(id: string, feedbackType: 'thumbs-up' | 'thumbs-down'): LogEntry | null {
+export async function updateFeedback(id: string, feedbackType: 'thumbs-up' | 'thumbs-down'): Promise<LogEntry | null> {
   try {
-    const logs = getLogs();
+    const logs = await getLogs();
     const index = logs.findIndex(log => log.id === id);
     if (index !== -1) {
       logs[index].feedback = feedbackType;
-      fs.writeFileSync(DB_FILE, JSON.stringify(logs, null, 2), 'utf-8');
+      await fs.promises.writeFile(DB_FILE, JSON.stringify(logs, null, 2), 'utf-8');
       return logs[index];
     }
     return null;
@@ -137,8 +151,8 @@ export function updateFeedback(id: string, feedbackType: 'thumbs-up' | 'thumbs-d
   }
 }
 
-export function getStats(): StatsResult {
-  const logs = getLogs();
+export async function getStats(): Promise<StatsResult> {
+  const logs = await getLogs();
   const successfulLogs = logs.filter(log => log.success);
   
   const totalQueries = logs.length;
@@ -183,9 +197,9 @@ export function getStats(): StatsResult {
   };
 }
 
-export function clearLogs(): boolean {
+export async function clearLogs(): Promise<boolean> {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
+    await fs.promises.writeFile(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
     return true;
   } catch (error) {
     console.error('Error clearing db:', error);

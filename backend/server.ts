@@ -90,9 +90,9 @@ app.post('/api/compare', async (req: Request, res: Response): Promise<any> => {
 /**
  * Get aggregated analytics stats
  */
-app.get('/api/stats', (_req: Request, res: Response) => {
+app.get('/api/stats', async (_req: Request, res: Response) => {
   try {
-    const stats = getStats();
+    const stats = await getStats();
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve stats' });
@@ -102,7 +102,7 @@ app.get('/api/stats', (_req: Request, res: Response) => {
 /**
  * Submit user feedback on a routing choice
  */
-app.post('/api/feedback', (req: Request, res: Response): any => {
+app.post('/api/feedback', async (req: Request, res: Response): Promise<any> => {
   const { id, feedback } = req.body;
 
   if (!id || !feedback) {
@@ -110,7 +110,7 @@ app.post('/api/feedback', (req: Request, res: Response): any => {
   }
 
   try {
-    const updated = updateFeedback(id, feedback);
+    const updated = await updateFeedback(id, feedback);
     if (updated) {
       res.json({ success: true, log: updated });
     } else {
@@ -131,9 +131,9 @@ app.get('/api/models', (_req: Request, res: Response) => {
 /**
  * Clear analytics logs
  */
-app.post('/api/clear', (_req: Request, res: Response) => {
+app.post('/api/clear', async (_req: Request, res: Response) => {
   try {
-    const success = clearLogs();
+    const success = await clearLogs();
     res.json({ success });
   } catch (error) {
     res.status(500).json({ error: 'Failed to clear logs' });
